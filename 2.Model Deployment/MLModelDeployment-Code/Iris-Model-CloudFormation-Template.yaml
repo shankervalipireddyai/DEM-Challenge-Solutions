@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  ModelS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: 'iris-models'
+
+  ModelFile:
+    Type: 'AWS::S3::Object'
+    Properties:
+      Bucket: !Ref ModelS3Bucket
+      Key: 'iris_model.h5'
+      ContentType: 'application/h5'
+      Body: 'path/to/iris_model.h5'
+
+  TaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      ContainerDefinitions:
+        - Name: 'iris-api'
+          Image: 'tensorflow/serving:latest'
+          PortMappings:
+            - ContainerPort: 5000
+          Environment:
+            - Name: 'MODEL_NAME'
+              Value: 'iris'
+            - Name: 'MODEL_BASE_PATH'
+              Value: !Join ['/', [!Ref 'AWS::shankeravalipiai', !Ref ModelS3Bucket, 'iris_model.sav']]
+          MountPoints:
+            - ContainerPath: '/models'
+              SourceVolume: 'iris-models'
+
+  Volume:
+    Type: 'AWS::ECS::Volume'
+    Properties:
+      Name: 'iris-models'
+      Host:
+        SourcePath: '/iris-models'
+
+  Service:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster: 'iris-cluster'
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: 1
+      LoadBalancers:
+        - ContainerName: 'iris-api'
+          ContainerPort: 5000
+          TargetGroupArn: !Ref TargetGroup
+ 
+
+  TargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: 'iris-target-group'
+      Port: 5000
+      Protocol: HTTP
+      VpcId: !Ref 'AWS::VPC::ID'
+      HealthCheckInterval
